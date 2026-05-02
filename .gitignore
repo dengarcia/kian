@@ -1,4 +1,4 @@
 tools/node/node_modules/
 tools/python/__pycache__/
 .env
-db/db.json
+db/*.db

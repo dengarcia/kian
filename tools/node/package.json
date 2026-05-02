@@ -4,9 +4,11 @@
   "description": "A framework for building AI agents with task management",
   "private": true,
   "scripts": {
-    "tasks": "node tools/tasks.js"
+    "tasks": "node tasks.js",
+    "ui": "node server.js"
   },
   "dependencies": {
+    "better-sqlite3": "^9.0.0",
     "dotenv": "^16.0.0"
   }
 }
