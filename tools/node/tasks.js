@@ -3,71 +3,12 @@
 
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
 
 require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 
-const DB_PATH = path.join(__dirname, '../../db/db.json');
+const db = require('./db');
+
 const AGENT_NAME = process.env.AGENT_NAME || 'Kian';
-
-// ── Database ──────────────────────────────────────────────────────────────────
-
-function loadDb() {
-  if (!fs.existsSync(DB_PATH)) {
-    console.error(`Database not found at ${DB_PATH}`);
-    console.error('Copy db.example.json to db/db.json to get started.');
-    process.exit(1);
-  }
-  return JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
-}
-
-function saveDb(db) {
-  fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
-}
-
-function newId(prefix) {
-  return `${prefix}_${crypto.randomBytes(4).toString('hex')}`;
-}
-
-function now() {
-  return new Date().toISOString();
-}
-
-// ── Resolvers ─────────────────────────────────────────────────────────────────
-
-function resolveUser(db, nameOrId) {
-  if (!nameOrId) return null;
-  const needle = nameOrId.toLowerCase();
-  return db.users.find(u =>
-    u.id === nameOrId ||
-    u.name.toLowerCase() === needle ||
-    u.name.toLowerCase().includes(needle)
-  ) || null;
-}
-
-function resolveProject(db, nameOrId) {
-  if (!nameOrId) return null;
-  const needle = nameOrId.toLowerCase();
-  return db.projects.find(p =>
-    p.id === nameOrId ||
-    p.name.toLowerCase() === needle ||
-    p.name.toLowerCase().includes(needle)
-  ) || null;
-}
-
-function resolveTask(db, idOrSuffix) {
-  if (!idOrSuffix) return null;
-  return db.tasks.find(t => t.id === idOrSuffix || t.id.endsWith(idOrSuffix)) || null;
-}
-
-function getUserName(db, userId) {
-  return db.users.find(u => u.id === userId)?.name || userId;
-}
-
-function getProjectName(db, projectId) {
-  if (!projectId) return null;
-  return db.projects.find(p => p.id === projectId)?.name || projectId;
-}
 
 // ── CLI arg parsing ───────────────────────────────────────────────────────────
 
@@ -100,56 +41,53 @@ const STATUS_ICON = {
 
 const PRIORITY_LABEL = { low: 'low', medium: 'med', high: 'HIGH' };
 
-function printTask(db, task, { showComments = false } = {}) {
+function printTask(task, { showComments = false } = {}) {
   const icon = STATUS_ICON[task.status] || '·';
-  const assigneeNames = task.assignees.map(id => getUserName(db, id)).join(', ');
-  const project = getProjectName(db, task.project_id);
+  const assigneeNames = (task.assignees || []).map(u => u.name).join(', ');
   const priority = PRIORITY_LABEL[task.priority] || task.priority;
   const shortId = task.id.slice(-8);
 
   console.log(`\n  ${icon}  [${shortId}]  ${task.title}`);
-  console.log(`     status: ${task.status}  |  priority: ${priority}${project ? `  |  project: ${project}` : ''}`);
+  console.log(`     status: ${task.status}  |  priority: ${priority}${task.project_name ? `  |  project: ${task.project_name}` : ''}`);
   if (assigneeNames) console.log(`     assignees: ${assigneeNames}`);
   if (task.description) console.log(`     description: ${task.description}`);
   if (task.notes) console.log(`     notes: ${task.notes}`);
 
-  if (showComments) {
-    const taskComments = (db.comments || []).filter(c => c.task_id === task.id);
-    if (taskComments.length > 0) {
-      console.log(`     --- comments (${taskComments.length}) ---`);
-      for (const c of taskComments) {
-        const author = getUserName(db, c.author_id);
-        const date = c.created_at.slice(0, 10);
-        console.log(`     [${date}] ${author}: ${c.body}`);
-      }
+  if (showComments && task.comments?.length) {
+    console.log(`     --- comments (${task.comments.length}) ---`);
+    for (const c of task.comments) {
+      const author = c.author_name || '(unknown)';
+      const date = c.created_at.slice(0, 10);
+      console.log(`     [${date}] ${author}: ${c.body}`);
     }
   }
 }
 
-// ── Task commands ─────────────────────────────────────────────────────────────
+// ── Validation ────────────────────────────────────────────────────────────────
 
 const VALID_STATUSES = ['todo', 'in_progress', 'needs_clarification', 'review', 'blocked', 'done', 'cancelled'];
 const VALID_PRIORITIES = ['low', 'medium', 'high'];
 
-function cmdList(db, flags) {
-  // By default, exclude done and cancelled. A --status flag overrides this.
-  let tasks = flags.status
-    ? db.tasks.filter(t => t.status === flags.status)
-    : db.tasks.filter(t => !['done', 'cancelled'].includes(t.status));
+// ── Task commands ─────────────────────────────────────────────────────────────
+
+function cmdList(flags) {
+  const filters = {};
+  if (flags.status) filters.status = flags.status;
 
   if (flags.assignee) {
-    const user = resolveUser(db, flags.assignee);
+    const user = db.getUserByNameOrId(flags.assignee);
     if (!user) { console.error(`User not found: ${flags.assignee}`); process.exit(1); }
-    tasks = tasks.filter(t => t.assignees.includes(user.id));
+    filters.assigneeId = user.id;
   }
 
   if (flags.project) {
-    const project = resolveProject(db, flags.project);
+    const project = db.getProjectByNameOrId(flags.project);
     if (!project) { console.error(`Project not found: ${flags.project}`); process.exit(1); }
-    tasks = tasks.filter(t => t.project_id === project.id);
+    filters.projectId = project.id;
   }
 
-  if (tasks.length === 0) { console.log('No tasks found.'); return; }
+  const tasks = db.getTasks(filters);
+  if (!tasks.length) { console.log('No tasks found.'); return; }
 
   const labelParts = [];
   if (flags.status) labelParts.push(`status: ${flags.status}`);
@@ -158,38 +96,38 @@ function cmdList(db, flags) {
   const label = labelParts.length ? labelParts.join(', ') : 'all active';
 
   console.log(`\nTasks (${tasks.length}, ${label}):`);
-  for (const task of tasks) printTask(db, task);
+  for (const task of tasks) printTask(task);
   console.log('');
 }
 
-function cmdGet(db, id) {
+function cmdGet(id) {
   if (!id) { console.error('Task ID required'); process.exit(1); }
-  const task = resolveTask(db, id);
+  const task = db.getTask(id);
   if (!task) { console.error(`Task not found: ${id}`); process.exit(1); }
-  printTask(db, task, { showComments: true });
+  printTask(task, { showComments: true });
   console.log('');
 }
 
-function cmdAdd(db, flags) {
+function cmdAdd(flags) {
   if (!flags.title) { console.error('--title is required'); process.exit(1); }
 
   const assignees = [];
   if (flags.assignee) {
-    const user = resolveUser(db, flags.assignee);
+    const user = db.getUserByNameOrId(flags.assignee);
     if (!user) { console.error(`User not found: ${flags.assignee}`); process.exit(1); }
     assignees.push(user.id);
   }
 
   let project_id = null;
   if (flags.project) {
-    const project = resolveProject(db, flags.project);
+    const project = db.getProjectByNameOrId(flags.project);
     if (!project) { console.error(`Project not found: ${flags.project}`); process.exit(1); }
     project_id = project.id;
   }
 
   let created_by = null;
   if (flags['created-by']) {
-    const user = resolveUser(db, flags['created-by']);
+    const user = db.getUserByNameOrId(flags['created-by']);
     if (!user) { console.error(`User not found: ${flags['created-by']}`); process.exit(1); }
     created_by = user.id;
   }
@@ -199,203 +137,148 @@ function cmdAdd(db, flags) {
     process.exit(1);
   }
 
-  const task = {
-    id: newId('tsk'),
+  const task = db.addTask({
     title: flags.title,
     description: flags.description || null,
-    status: 'todo',
     priority: flags.priority || 'medium',
     project_id,
     assignees,
     created_by,
-    notes: null,
-    created_at: now(),
-    updated_at: now(),
-  };
-
-  db.tasks.push(task);
-  saveDb(db);
+  });
   console.log(`Created: [${task.id.slice(-8)}] ${task.title}`);
 }
 
-function cmdUpdate(db, id, flags) {
+function cmdUpdate(id, flags) {
   if (!id) { console.error('Task ID required'); process.exit(1); }
-  const task = resolveTask(db, id);
-  if (!task) { console.error(`Task not found: ${id}`); process.exit(1); }
 
+  const fields = {};
   if (flags.status) {
     if (!VALID_STATUSES.includes(flags.status)) {
       console.error(`Invalid status. Valid values: ${VALID_STATUSES.join(', ')}`);
       process.exit(1);
     }
-    task.status = flags.status;
+    fields.status = flags.status;
   }
-  if (flags.title !== undefined) task.title = flags.title;
-  if (flags.description !== undefined) task.description = flags.description;
-  if (flags.notes !== undefined) task.notes = flags.notes;
+  if (flags.title !== undefined) fields.title = flags.title;
+  if (flags.description !== undefined) fields.description = flags.description;
+  if (flags.notes !== undefined) fields.notes = flags.notes;
   if (flags.priority !== undefined) {
     if (!VALID_PRIORITIES.includes(flags.priority)) {
       console.error(`Invalid priority. Valid values: ${VALID_PRIORITIES.join(', ')}`);
       process.exit(1);
     }
-    task.priority = flags.priority;
+    fields.priority = flags.priority;
   }
 
-  task.updated_at = now();
-  saveDb(db);
+  const task = db.updateTask(id, fields);
+  if (!task) { console.error(`Task not found: ${id}`); process.exit(1); }
   console.log(`Updated: [${task.id.slice(-8)}] ${task.title}${flags.status ? `  ->  ${flags.status}` : ''}`);
 }
 
-function cmdAssign(db, id, flags) {
+function cmdAssign(id, flags) {
   if (!id || !flags.to) { console.error('Usage: tasks.js assign <task-id> --to <user>'); process.exit(1); }
-  const task = resolveTask(db, id);
+  const task = db.getTaskByIdOrSuffix(id);
   if (!task) { console.error(`Task not found: ${id}`); process.exit(1); }
-  const user = resolveUser(db, flags.to);
+  const user = db.getUserByNameOrId(flags.to);
   if (!user) { console.error(`User not found: ${flags.to}`); process.exit(1); }
-
-  if (!task.assignees.includes(user.id)) {
-    task.assignees.push(user.id);
-    task.updated_at = now();
-    saveDb(db);
-  }
+  db.assignUser(id, user.id);
   console.log(`Assigned ${user.name} to [${task.id.slice(-8)}] ${task.title}`);
 }
 
-function cmdComment(db, id, flags) {
+function cmdComment(id, flags) {
   if (!id || !flags.body) { console.error('Usage: tasks.js comment <task-id> --body "..."'); process.exit(1); }
-  const task = resolveTask(db, id);
+  const task = db.getTaskByIdOrSuffix(id);
   if (!task) { console.error(`Task not found: ${id}`); process.exit(1); }
 
-  // --author flag, or fall back to AGENT_NAME from .env
   const authorName = flags.author || AGENT_NAME;
-  const user = resolveUser(db, authorName);
+  const user = db.getUserByNameOrId(authorName);
 
-  if (!db.comments) db.comments = [];
-  db.comments.push({
-    id: newId('cmt'),
-    task_id: task.id,
-    author_id: user?.id || null,
-    body: flags.body,
-    created_at: now(),
-  });
-  task.updated_at = now();
-  saveDb(db);
+  db.addComment({ task_id: task.id, author_id: user?.id || null, body: flags.body });
   console.log(`Comment added to [${task.id.slice(-8)}] ${task.title}`);
+}
+
+// ── Poll command ──────────────────────────────────────────────────────────────
+
+function cmdPoll(flags) {
+  const agentName = flags.assignee || AGENT_NAME;
+  const agent = db.getUserByNameOrId(agentName);
+  if (!agent) { console.error(`Agent user not found: ${agentName}`); process.exit(2); }
+
+  const tasks = db.getActionableTasks(agent.id);
+
+  if (!tasks.length) {
+    console.log(`No actionable tasks for ${agent.name}.`);
+    process.exit(1);
+  }
+
+  console.log(`${tasks.length} task${tasks.length > 1 ? 's' : ''} ready for ${agent.name}:`);
+  for (const task of tasks) {
+    const priority = PRIORITY_LABEL[task.priority] || task.priority;
+    console.log(`  [${task.id.slice(-8)}]  ${task.title}  (${task.status}, ${priority})`);
+  }
+  process.exit(0);
+}
+
+// ── Seed command ──────────────────────────────────────────────────────────────
+
+function cmdSeed() {
+  const examplePath = path.join(__dirname, '../../db.example.json');
+  if (!fs.existsSync(examplePath)) {
+    console.error('db.example.json not found at project root');
+    process.exit(1);
+  }
+  const data = JSON.parse(fs.readFileSync(examplePath, 'utf8'));
+  const counts = db.seed(data);
+  console.log(`Seeded: ${counts.users} users, ${counts.projects} projects, ${counts.tasks} tasks, ${counts.comments} comments`);
 }
 
 // ── User commands ─────────────────────────────────────────────────────────────
 
-function cmdUsersList(db) {
-  if (!db.users?.length) { console.log('No users.'); return; }
+function cmdUsersList() {
+  const users = db.getUsers();
+  if (!users.length) { console.log('No users.'); return; }
   console.log('\nUsers:\n');
-  for (const u of db.users) {
+  for (const u of users) {
     console.log(`  [${u.id.slice(-8)}]  ${u.name.padEnd(20)}  ${u.type}${u.email ? `  <${u.email}>` : ''}`);
   }
   console.log('');
 }
 
-function cmdUsersAdd(db, flags) {
+function cmdUsersAdd(flags) {
   if (!flags.name) { console.error('--name is required'); process.exit(1); }
   if (flags.type && !['human', 'agent'].includes(flags.type)) {
     console.error('--type must be "human" or "agent"'); process.exit(1);
   }
-  const user = {
-    id: newId('usr'),
-    name: flags.name,
-    type: flags.type || 'human',
-    email: flags.email || null,
-    created_at: now(),
-  };
-  db.users.push(user);
-  saveDb(db);
+  const user = db.addUser({ name: flags.name, type: flags.type || 'human', email: flags.email });
   console.log(`User created: [${user.id.slice(-8)}]  ${user.name}  (${user.type})`);
 }
 
 // ── Project commands ──────────────────────────────────────────────────────────
 
-function cmdProjectsList(db) {
-  if (!db.projects?.length) { console.log('No projects.'); return; }
+function cmdProjectsList() {
+  const projects = db.getProjects();
+  if (!projects.length) { console.log('No projects.'); return; }
   console.log('\nProjects:\n');
-  for (const p of db.projects) {
-    const active = db.tasks.filter(t => t.project_id === p.id && !['done', 'cancelled'].includes(t.status)).length;
-    console.log(`  [${p.id.slice(-8)}]  ${p.name.padEnd(25)}  ${active} active tasks${p.description ? `  — ${p.description}` : ''}`);
+  for (const p of projects) {
+    console.log(`  [${p.id.slice(-8)}]  ${p.name.padEnd(25)}  ${p.active_task_count} active tasks${p.description ? `  — ${p.description}` : ''}`);
   }
   console.log('');
 }
 
-function cmdProjectsAdd(db, flags) {
+function cmdProjectsAdd(flags) {
   if (!flags.name) { console.error('--name is required'); process.exit(1); }
-  const project = {
-    id: newId('prj'),
-    name: flags.name,
-    description: flags.description || null,
-    created_at: now(),
-  };
-  db.projects.push(project);
-  saveDb(db);
+  const project = db.addProject({ name: flags.name, description: flags.description });
   console.log(`Project created: [${project.id.slice(-8)}]  ${project.name}`);
-}
-
-// ── Poll command ─────────────────────────────────────────────────────────────
-//
-// Evaluates whether the agent has actionable work without invoking an LLM.
-// Exit 0 = work to do (caller should invoke the agent).
-// Exit 1 = nothing to do.
-
-function cmdPoll(db, flags) {
-  const agentName = flags.assignee || AGENT_NAME;
-  const agent = resolveUser(db, agentName);
-  if (!agent) { console.error(`Agent user not found: ${agentName}`); process.exit(2); }
-
-  const comments = db.comments || [];
-  const actionable = [];
-
-  const candidates = db.tasks.filter(t =>
-    t.assignees.includes(agent.id) &&
-    ['todo', 'in_progress', 'needs_clarification'].includes(t.status)
-  );
-
-  for (const task of candidates) {
-    if (task.status === 'needs_clarification') {
-      // Only actionable if a human replied after the agent's last comment
-      const taskComments = comments
-        .filter(c => c.task_id === task.id)
-        .sort((a, b) => a.created_at.localeCompare(b.created_at));
-
-      const lastAgentCommentIdx = taskComments.map(c => c.author_id).lastIndexOf(agent.id);
-      const hasReply = lastAgentCommentIdx !== -1 &&
-        taskComments.slice(lastAgentCommentIdx + 1).some(c => c.author_id !== agent.id);
-
-      if (hasReply) {
-        actionable.push({ task, reason: 'clarification received' });
-      }
-      // else: still waiting — skip
-    } else {
-      actionable.push({ task, reason: task.status });
-    }
-  }
-
-  if (actionable.length === 0) {
-    console.log(`No actionable tasks for ${agent.name}.`);
-    process.exit(1);
-  }
-
-  console.log(`${actionable.length} task${actionable.length > 1 ? 's' : ''} ready for ${agent.name}:`);
-  for (const { task, reason } of actionable) {
-    const priority = PRIORITY_LABEL[task.priority] || task.priority;
-    console.log(`  [${task.id.slice(-8)}]  ${task.title}  (${reason}, ${priority})`);
-  }
-  process.exit(0);
 }
 
 // ── Help ──────────────────────────────────────────────────────────────────────
 
 function printHelp() {
   console.log(`
-Kian Agent Framework - Task Manager
+Kian — Task Manager
 
 Usage:
-  node tools/tasks.js <command> [options]
+  node tools/node/tasks.js <command> [options]
 
 Task commands:
   poll                               Check if the agent has actionable work (exit 0 = yes, 1 = no)
@@ -409,21 +292,19 @@ Task commands:
   update <id> [options]              Update a task
   assign <id> --to <user>            Add a user to task assignees
   comment <id> --body <text>         Add a comment to a task
+  seed                               Initialize the database from db.example.json
 
 Add options:
   --title <text>          Task title (required)
   --description <text>    Longer context for the task
   --priority <level>      low | medium | high  (default: medium)
-  --project <name|id>     Assign to a project
-  --assignee <name|id>    Assign to a user
-  --created-by <name|id>  Record who created the task
+  --project <name|id>
+  --assignee <name|id>
+  --created-by <name|id>
 
 Update options:
-  --status <status>       todo | in_progress | needs_clarification | review | blocked | done | cancelled
-  --title <text>
-  --description <text>
-  --priority <level>      low | medium | high
-  --notes <text>          Summary notes (shown in list view)
+  --status <status>   todo | in_progress | needs_clarification | review | blocked | done | cancelled
+  --title <text>  --description <text>  --priority <level>  --notes <text>
 
 Comment options:
   --body <text>           Comment text (required)
@@ -447,24 +328,23 @@ function main() {
 
   if (!command || command === 'help') { printHelp(); return; }
 
-  const db = loadDb();
-
   switch (command) {
-    case 'poll':     cmdPoll(db, flags); break;
-    case 'list':     cmdList(db, flags); break;
-    case 'get':      cmdGet(db, sub); break;
-    case 'add':      cmdAdd(db, flags); break;
-    case 'update':   cmdUpdate(db, sub, flags); break;
-    case 'assign':   cmdAssign(db, sub, flags); break;
-    case 'comment':  cmdComment(db, sub, flags); break;
+    case 'poll':     cmdPoll(flags); break;
+    case 'list':     cmdList(flags); break;
+    case 'get':      cmdGet(sub); break;
+    case 'add':      cmdAdd(flags); break;
+    case 'update':   cmdUpdate(sub, flags); break;
+    case 'assign':   cmdAssign(sub, flags); break;
+    case 'comment':  cmdComment(sub, flags); break;
+    case 'seed':     cmdSeed(); break;
     case 'users':
-      if (!sub || sub === 'list') cmdUsersList(db);
-      else if (sub === 'add') cmdUsersAdd(db, flags);
+      if (!sub || sub === 'list') cmdUsersList();
+      else if (sub === 'add') cmdUsersAdd(flags);
       else { console.error(`Unknown users subcommand: ${sub}`); process.exit(1); }
       break;
     case 'projects':
-      if (!sub || sub === 'list') cmdProjectsList(db);
-      else if (sub === 'add') cmdProjectsAdd(db, flags);
+      if (!sub || sub === 'list') cmdProjectsList();
+      else if (sub === 'add') cmdProjectsAdd(flags);
       else { console.error(`Unknown projects subcommand: ${sub}`); process.exit(1); }
       break;
     default:

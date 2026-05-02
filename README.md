@@ -50,9 +50,8 @@ cp .env.example .env
 
 **3. Set up the database**
 ```bash
-mkdir -p db
-cp db.example.json db/db.json
-# Edit db/db.json — replace the example users with your team
+node tools/node/tasks.js seed
+# Seeds from db.example.json — edit it first to set your team's names/emails
 ```
 
 **4. Verify**
@@ -92,6 +91,20 @@ Task IDs can be the full ID or the 8-character suffix shown in `list` output.
 
 The agent definition is in `.claude/agents/kian.md`.
 
+## UI
+
+A local web interface for viewing tasks and agent activity:
+
+```bash
+node tools/node/server.js
+# open http://localhost:3000
+```
+
+- **Tasks tab** — filterable task list with expandable detail and comment thread
+- **Activity tab** — reverse-chronological feed of all comments, useful for reviewing what Kian did and why
+
 ## Database
 
-The default backend is a local JSON file at `db/db.json` (gitignored). The data model is designed to be portable — a Notion adapter or any other backend can replace it by implementing the same read/write interface.
+The backend is SQLite (`db/kian.db`, gitignored). Schema is created automatically on first run. Seed data lives in `db.example.json` — edit it to set up your team, then run `node tools/node/tasks.js seed`.
+
+The data model is designed to be portable — a Notion adapter or any other backend can replace `tools/node/db.js` by implementing the same interface.
