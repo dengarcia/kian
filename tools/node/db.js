@@ -242,7 +242,7 @@ function updateTask(idOrSuffix, fields) {
   const task = getTaskByIdOrSuffix(idOrSuffix);
   if (!task) return null;
 
-  const allowed = ['status', 'title', 'description', 'priority', 'notes'];
+  const allowed = ['status', 'title', 'description', 'priority', 'notes', 'project_id'];
   const updates = {};
   for (const k of allowed) {
     if (fields[k] !== undefined) updates[k] = fields[k];
@@ -360,6 +360,27 @@ function seed(data) {
   };
 }
 
+function setAssignees(taskId, userIds) {
+  const db = getDb();
+  db.transaction(() => {
+    db.prepare('DELETE FROM task_assignees WHERE task_id = ?').run(taskId);
+    const insert = db.prepare('INSERT INTO task_assignees (task_id, user_id) VALUES (?, ?)');
+    for (const uid of userIds) insert.run(taskId, uid);
+  })();
+}
+
+function deleteTask(idOrSuffix) {
+  const db = getDb();
+  const task = getTaskByIdOrSuffix(idOrSuffix);
+  if (!task) return false;
+  db.transaction(() => {
+    db.prepare('DELETE FROM comments WHERE task_id = ?').run(task.id);
+    db.prepare('DELETE FROM task_assignees WHERE task_id = ?').run(task.id);
+    db.prepare('DELETE FROM tasks WHERE id = ?').run(task.id);
+  })();
+  return true;
+}
+
 module.exports = {
   getUserByNameOrId,
   getProjectByNameOrId,
@@ -373,6 +394,8 @@ module.exports = {
   addTask,
   updateTask,
   assignUser,
+  setAssignees,
+  deleteTask,
   addComment,
   getActionableTasks,
   getRecentActivity,
