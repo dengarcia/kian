@@ -278,7 +278,7 @@ function printHelp() {
 Kian — Task Manager
 
 Usage:
-  node tools/node/tasks.js <command> [options]
+  kian <command> [options]
 
 Task commands:
   poll                               Check if the agent has actionable work (exit 0 = yes, 1 = no)
