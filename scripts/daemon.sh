@@ -25,6 +25,8 @@ if [ ! -x "$KIAN" ]; then
   exit 1
 fi
 
+trap 'echo ""; echo "Daemon stopped."; kill 0; exit 0' INT TERM
+
 echo "Kian daemon started — polling every ${INTERVAL}s (press Ctrl-C to stop)"
 echo "Project: $REPO_DIR"
 echo ""
