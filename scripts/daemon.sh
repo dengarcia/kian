@@ -13,7 +13,7 @@ set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 KIAN="$REPO_DIR/kian"
-INTERVAL="${POLL_INTERVAL:-300}"
+INTERVAL="${POLL_INTERVAL:-30}"
 
 if ! command -v claude &>/dev/null; then
   echo "Error: 'claude' CLI not found. Install it with: npm install -g @anthropic-ai/claude-code" >&2
