@@ -227,6 +227,47 @@ main { max-width: 820px; margin: 0 auto; padding: 20px 24px; }
 .act-task { font-size: 12px; color: #3b82f6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px; }
 .act-time { font-size: 11px; color: var(--faint); margin-left: auto; }
 .activity-body { font-size: 13px; color: var(--muted); line-height: 1.5; }
+
+/* ── Reply form ── */
+.reply-form { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+
+.reply-author {
+  width: fit-content;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  background: white;
+  color: var(--text);
+}
+
+.reply-textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  color: var(--text);
+  line-height: 1.5;
+}
+.reply-textarea:focus { outline: none; border-color: #3b82f6; }
+
+.reply-actions { display: flex; justify-content: flex-end; }
+
+.reply-submit {
+  background: #3b82f6;
+  color: white;
+  border: none;
+  padding: 6px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.reply-submit:hover { background: #2563eb; }
+.reply-submit:disabled { opacity: 0.5; cursor: default; }
 </style>
 </head>
 <body>
@@ -381,9 +422,47 @@ function detailHTML(t) {
   if (t.notes)       h += `<div class="section"><div class="section-label">Notes</div><div class="section-body notes">${esc(t.notes)}</div></div>`;
   const cc = t.comments || [];
   h += `<div class="section"><div class="section-label">Comments${cc.length ? ` (${cc.length})` : ''}</div>`;
-  h += cc.length ? commentsHTML(cc) : '<div style="color:var(--faint);font-size:12px">No comments yet.</div>';
+  h += cc.length ? commentsHTML(cc) : '<div style="color:var(--faint);font-size:12px;margin-bottom:10px">No comments yet.</div>';
+  h += replyFormHTML(t.id);
   h += '</div>';
   return h;
+}
+
+function replyFormHTML(taskId) {
+  const humanUsers = users.filter(u => u.type === 'human');
+  const options = humanUsers.map(u =>
+    `<option value="${u.id}">${esc(u.name)}</option>`
+  ).join('');
+  return `
+    <div class="reply-form" id="reply-${taskId}">
+      <select class="reply-author">${options}</select>
+      <textarea class="reply-textarea" placeholder="Write a comment…" rows="2"></textarea>
+      <div class="reply-actions">
+        <button class="reply-submit" onclick="submitReply('${taskId}')">Reply</button>
+      </div>
+    </div>`;
+}
+
+async function submitReply(taskId) {
+  const form  = document.getElementById(`reply-${taskId}`);
+  const body  = form.querySelector('.reply-textarea').value.trim();
+  const authorId = form.querySelector('.reply-author').value;
+  if (!body) return;
+
+  const btn = form.querySelector('.reply-submit');
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+
+  await fetch(`/api/tasks/${taskId}/comments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ author_id: authorId, body }),
+  });
+
+  // Reload the detail to show the new comment
+  const task = await api(`/api/tasks/${taskId}`);
+  document.getElementById(`d-${taskId}`).innerHTML = detailHTML(task);
+  await loadSummary();
 }
 
 function commentsHTML(cc) {

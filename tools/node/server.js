@@ -55,6 +55,26 @@ const server = http.createServer((req, res) => {
       return;
     }
 
+    // POST /api/tasks/:id/comments
+    const commentMatch = p.match(/^\/api\/tasks\/(.+)\/comments$/);
+    if (commentMatch && req.method === 'POST') {
+      let raw = '';
+      req.on('data', chunk => { raw += chunk; });
+      req.on('end', () => {
+        try {
+          const { author_id, body } = JSON.parse(raw);
+          if (!body?.trim()) { send(res, 400, { error: 'body is required' }); return; }
+          const task = db.getTaskByIdOrSuffix(commentMatch[1]);
+          if (!task) { notFound(res); return; }
+          const comment = db.addComment({ task_id: task.id, author_id: author_id || null, body: body.trim() });
+          send(res, 201, comment);
+        } catch (err) {
+          send(res, 500, { error: err.message });
+        }
+      });
+      return;
+    }
+
     // GET /api/tasks/:id
     const taskMatch = p.match(/^\/api\/tasks\/(.+)$/);
     if (taskMatch) {
