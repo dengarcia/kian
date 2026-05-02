@@ -14,19 +14,19 @@ User says `/update-task` or called at the end of completing a task.
 
 1. Add a comment summarizing what was done:
    ```bash
-   node tools/node/tasks.js comment <task-id> --body "Done: [brief summary of what was completed and any relevant details]"
+   ./kian comment <task-id> --body "Done: [brief summary of what was completed and any relevant details]"
    ```
 
 2. Set status to `review`:
    ```bash
-   node tools/node/tasks.js update <task-id> --status review --notes "[one-line summary]"
+   ./kian update <task-id> --status review --notes "[one-line summary]"
    ```
 
 ### If you hit an external blocker
 
 ```bash
-node tools/node/tasks.js comment <task-id> --body "Blocked: [what is blocking this and what is needed to unblock]"
-node tools/node/tasks.js update <task-id> --status blocked
+./kian comment <task-id> --body "Blocked: [what is blocking this and what is needed to unblock]"
+./kian update <task-id> --status blocked
 ```
 
 ### Rules

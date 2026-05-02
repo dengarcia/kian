@@ -13,7 +13,7 @@ User says `/check-tasks` or this is called on a schedule.
 ### Step 1 — Poll (no LLM cost)
 
 ```bash
-node tools/node/tasks.js poll
+./kian poll
 ```
 
 - Exit code `1` → no actionable tasks. Report "No tasks to work on." and stop.
@@ -31,14 +31,14 @@ For each actionable task (in priority order: `in_progress` first, then `high` �
 
 1. Read the full task context:
    ```bash
-   node tools/node/tasks.js get <task-id>
+   ./kian get <task-id>
    ```
 
 2. If the task is a `needs_clarification` with a reply — read the comments, then proceed as `in_progress`.
 
 3. If starting a new task:
    ```bash
-   node tools/node/tasks.js update <task-id> --status in_progress
+   ./kian update <task-id> --status in_progress
    ```
 
 4. Do the work.

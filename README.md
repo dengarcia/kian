@@ -50,36 +50,36 @@ cp .env.example .env
 
 **3. Set up the database**
 ```bash
-node tools/node/tasks.js seed
+./kian seed
 # Seeds from db.example.json — edit it first to set your team's names/emails
 ```
 
 **4. Verify**
 ```bash
-node tools/node/tasks.js users list
-node tools/node/tasks.js list
+./kian users list
+./kian list
 ```
 
 ## Task board CLI
 
 ```bash
 # See what Kian has to work on
-node tools/node/tasks.js poll
-node tools/node/tasks.js list --assignee Kian
+./kian poll
+./kian list --assignee Kian
 
 # Manage tasks
-node tools/node/tasks.js list
-node tools/node/tasks.js get <task-id>
-node tools/node/tasks.js add --title "Write product review" --assignee Kian --priority high
-node tools/node/tasks.js update <task-id> --status done
-node tools/node/tasks.js assign <task-id> --to Kian
-node tools/node/tasks.js comment <task-id> --body "Target audience is first-time buyers"
+./kian list
+./kian get <task-id>
+./kian add --title "Write product review" --assignee Kian --priority high
+./kian update <task-id> --status done
+./kian assign <task-id> --to Kian
+./kian comment <task-id> --body "Target audience is first-time buyers"
 
 # Users and projects
-node tools/node/tasks.js users list
-node tools/node/tasks.js users add --name "Alice" --type human --email alice@example.com
-node tools/node/tasks.js projects list
-node tools/node/tasks.js projects add --name "Blog" --description "Content production"
+./kian users list
+./kian users add --name "Alice" --type human --email alice@example.com
+./kian projects list
+./kian projects add --name "Blog" --description "Content production"
 ```
 
 Task IDs can be the full ID or the 8-character suffix shown in `list` output.
@@ -96,7 +96,7 @@ The agent definition is in `.claude/agents/kian.md`.
 A local web interface for viewing tasks and agent activity:
 
 ```bash
-node tools/node/server.js
+./kian dashboard
 # open http://localhost:3000
 ```
 
@@ -105,6 +105,6 @@ node tools/node/server.js
 
 ## Database
 
-The backend is SQLite (`db/kian.db`, gitignored). Schema is created automatically on first run. Seed data lives in `db.example.json` — edit it to set up your team, then run `node tools/node/tasks.js seed`.
+The backend is SQLite (`db/kian.db`, gitignored). Schema is created automatically on first run. Seed data lives in `db.example.json` — edit it to set up your team, then run `./kian seed`.
 
 The data model is designed to be portable — a Notion adapter or any other backend can replace `tools/node/db.js` by implementing the same interface.
