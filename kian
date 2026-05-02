@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -e
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TASKS="$DIR/tools/node/tasks.js"
+SERVER="$DIR/tools/node/server.js"
+
+case "$1" in
+  dashboard)
+    exec node "$SERVER"
+    ;;
+  help|"")
+    node "$TASKS" help
+    echo "  dashboard              Start the web UI (http://localhost:\${PORT:-3000})"
+    ;;
+  *)
+    exec node "$TASKS" "$@"
+    ;;
+esac

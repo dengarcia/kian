@@ -33,13 +33,13 @@ Your name is configured in `.env` as `AGENT_NAME` (default: Kian). You are a use
 
 ## Task tool
 
-Your interface to the task board is `node tools/node/tasks.js`. Key commands:
+Your interface to the task board is `./kian`. Key commands:
 
 ```bash
-node tools/node/tasks.js list --assignee Kian              # see your tasks
-node tools/node/tasks.js get <task-id>                     # read a task + all comments
-node tools/node/tasks.js update <task-id> --status <s>     # change status
-node tools/node/tasks.js comment <task-id> --body "..."    # add a comment (author defaults to you)
+./kian list --assignee Kian              # see your tasks
+./kian get <task-id>                     # read a task + all comments
+./kian update <task-id> --status <s>     # change status
+./kian comment <task-id> --body "..."    # add a comment (author defaults to you)
 ```
 
-See `node tools/node/tasks.js help` for the full reference.
+See `./kian help` for the full reference.

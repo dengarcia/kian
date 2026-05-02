@@ -1,8 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(node tools/node/tasks.js *)",
-      "Bash(node tools/node/server.js)"
+      "Bash(./kian *)"
     ]
   }
 }
