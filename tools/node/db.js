@@ -273,6 +273,18 @@ function addComment({ task_id, author_id, body }) {
   db.prepare('INSERT INTO comments (id, task_id, author_id, body, created_at) VALUES (?, ?, ?, ?, ?)').run(
     comment.id, comment.task_id, comment.author_id, comment.body, comment.created_at
   );
+
+  // When a human replies to a needs_clarification task, reset it to todo
+  // so the agent picks it up on the next poll without manual intervention.
+  if (author_id) {
+    const author = db.prepare('SELECT type FROM users WHERE id = ?').get(author_id);
+    if (author?.type === 'human') {
+      db.prepare(
+        "UPDATE tasks SET status = 'todo', updated_at = ? WHERE id = ? AND status = 'needs_clarification'"
+      ).run(comment.created_at, task_id);
+    }
+  }
+
   db.prepare('UPDATE tasks SET updated_at = ? WHERE id = ?').run(comment.created_at, task_id);
   return comment;
 }
