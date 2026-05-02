@@ -2,3 +2,6 @@ tools/node/node_modules/
 tools/python/__pycache__/
 .env
 db/*.db
+db/*.db-shm
+db/*.db-wal
+db/db.json
