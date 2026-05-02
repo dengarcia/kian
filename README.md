@@ -37,10 +37,11 @@ You review, confirm, and set tasks to `done`. That confirmation is yours — Kia
 
 ## Setup
 
-**1. Install dependencies**
+**1. Run setup**
 ```bash
-cd tools/node && npm install && cd ../..
+./setup.sh
 ```
+Installs dependencies and creates a `kian` symlink in `/usr/local/bin` so the command is available anywhere.
 
 **2. Configure environment**
 ```bash
@@ -48,38 +49,38 @@ cp .env.example .env
 # Edit .env — set AGENT_NAME if you want a different name than Kian
 ```
 
-**3. Set up the database**
+**3. Seed the database**
 ```bash
-./kian seed
-# Seeds from db.example.json — edit it first to set your team's names/emails
+# Edit db.example.json first to set your team's names/emails
+kian seed
 ```
 
 **4. Verify**
 ```bash
-./kian users list
-./kian list
+kian users list
+kian list
 ```
 
 ## Task board CLI
 
 ```bash
 # See what Kian has to work on
-./kian poll
-./kian list --assignee Kian
+kian poll
+kian list --assignee Kian
 
 # Manage tasks
-./kian list
-./kian get <task-id>
-./kian add --title "Write product review" --assignee Kian --priority high
-./kian update <task-id> --status done
-./kian assign <task-id> --to Kian
-./kian comment <task-id> --body "Target audience is first-time buyers"
+kian list
+kian get <task-id>
+kian add --title "Write product review" --assignee Kian --priority high
+kian update <task-id> --status done
+kian assign <task-id> --to Kian
+kian comment <task-id> --body "Target audience is first-time buyers"
 
 # Users and projects
-./kian users list
-./kian users add --name "Alice" --type human --email alice@example.com
-./kian projects list
-./kian projects add --name "Blog" --description "Content production"
+kian users list
+kian users add --name "Alice" --type human --email alice@example.com
+kian projects list
+kian projects add --name "Blog" --description "Content production"
 ```
 
 Task IDs can be the full ID or the 8-character suffix shown in `list` output.
@@ -96,7 +97,7 @@ The agent definition is in `.claude/agents/kian.md`.
 A local web interface for viewing tasks and agent activity:
 
 ```bash
-./kian dashboard
+kian dashboard
 # open http://localhost:3000
 ```
 
@@ -105,6 +106,6 @@ A local web interface for viewing tasks and agent activity:
 
 ## Database
 
-The backend is SQLite (`db/kian.db`, gitignored). Schema is created automatically on first run. Seed data lives in `db.example.json` — edit it to set up your team, then run `./kian seed`.
+The backend is SQLite (`db/kian.db`, gitignored). Schema is created automatically on first run. Seed data lives in `db.example.json` — edit it to set up your team, then run `kian seed`.
 
 The data model is designed to be portable — a Notion adapter or any other backend can replace `tools/node/db.js` by implementing the same interface.
