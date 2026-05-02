@@ -1,0 +1,12 @@
+{
+  "name": "kian-agent-framework",
+  "version": "0.1.0",
+  "description": "A framework for building AI agents with task management",
+  "private": true,
+  "scripts": {
+    "tasks": "node tools/tasks.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.0.0"
+  }
+}
