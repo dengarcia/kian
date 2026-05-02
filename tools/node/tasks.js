@@ -3,12 +3,66 @@
 
 const fs = require('fs');
 const path = require('path');
+const readline = require('readline');
 
 require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 
 const db = require('./db');
 
 const AGENT_NAME = process.env.AGENT_NAME || 'Kian';
+
+// ── Project detection ─────────────────────────────────────────────────────────
+
+function realCwd() {
+  try { return fs.realpathSync(process.cwd()); } catch { return process.cwd(); }
+}
+
+function detectProject() {
+  const projects = db.getProjectsWithRootFolders();
+  if (!projects.length) return null;
+  const root = path.parse(process.cwd()).root;
+  let dir = realCwd();
+  while (true) {
+    const match = projects.find(p => p.root_folder === dir);
+    if (match) return match;
+    if (dir === root) break;
+    dir = path.dirname(dir);
+  }
+  return null;
+}
+
+// Returns { projectId, projectName, projectFolder, detected } or null.
+// null means no project scope (global view).
+function resolveProjectContext(flags) {
+  if (flags.all) return null;
+
+  if (flags.project) {
+    const project = db.getProjectByNameOrId(flags.project);
+    if (!project) { console.error(`Project not found: ${flags.project}`); process.exit(1); }
+    return { projectId: project.id, projectName: project.name, detected: false };
+  }
+
+  const detected = detectProject();
+  if (detected) return { projectId: detected.id, projectName: detected.name, projectFolder: detected.root_folder, detected: true };
+
+  return null;
+}
+
+function printDetectionFeedback(ctx) {
+  if (ctx?.detected) {
+    const folder = ctx.projectFolder ? ` (${ctx.projectFolder})` : '';
+    process.stderr.write(`» project: ${ctx.projectName}${folder}\n`);
+  }
+}
+
+// ── Interactive prompt ────────────────────────────────────────────────────────
+
+function prompt(question) {
+  return new Promise(resolve => {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    rl.question(question, answer => { rl.close(); resolve(answer.trim()); });
+  });
+}
 
 // ── CLI arg parsing ───────────────────────────────────────────────────────────
 
@@ -71,6 +125,9 @@ const VALID_PRIORITIES = ['low', 'medium', 'high'];
 // ── Task commands ─────────────────────────────────────────────────────────────
 
 function cmdList(flags) {
+  const ctx = resolveProjectContext(flags);
+  printDetectionFeedback(ctx);
+
   const filters = {};
   if (flags.status) filters.status = flags.status;
 
@@ -80,11 +137,7 @@ function cmdList(flags) {
     filters.assigneeId = user.id;
   }
 
-  if (flags.project) {
-    const project = db.getProjectByNameOrId(flags.project);
-    if (!project) { console.error(`Project not found: ${flags.project}`); process.exit(1); }
-    filters.projectId = project.id;
-  }
+  if (ctx) filters.projectId = ctx.projectId;
 
   const tasks = db.getTasks(filters);
   if (!tasks.length) { console.log('No tasks found.'); return; }
@@ -92,7 +145,7 @@ function cmdList(flags) {
   const labelParts = [];
   if (flags.status) labelParts.push(`status: ${flags.status}`);
   if (flags.assignee) labelParts.push(`assignee: ${flags.assignee}`);
-  if (flags.project) labelParts.push(`project: ${flags.project}`);
+  if (ctx) labelParts.push(`project: ${ctx.projectName}`);
   const label = labelParts.length ? labelParts.join(', ') : 'all active';
 
   console.log(`\nTasks (${tasks.length}, ${label}):`);
@@ -119,10 +172,10 @@ function cmdAdd(flags) {
   }
 
   let project_id = null;
-  if (flags.project) {
-    const project = db.getProjectByNameOrId(flags.project);
-    if (!project) { console.error(`Project not found: ${flags.project}`); process.exit(1); }
-    project_id = project.id;
+  const projectCtx = resolveProjectContext(flags);
+  if (projectCtx) {
+    project_id = projectCtx.projectId;
+    printDetectionFeedback(projectCtx);
   }
 
   let created_by = null;
@@ -204,7 +257,10 @@ function cmdPoll(flags) {
   const agent = db.getUserByNameOrId(agentName);
   if (!agent) { console.error(`Agent user not found: ${agentName}`); process.exit(2); }
 
-  const tasks = db.getActionableTasks(agent.id);
+  const ctx = resolveProjectContext(flags);
+  printDetectionFeedback(ctx);
+
+  const tasks = db.getActionableTasks(agent.id, ctx?.projectId || null);
 
   if (!tasks.length) {
     console.log(`No actionable tasks for ${agent.name}.`);
@@ -260,7 +316,8 @@ function cmdProjectsList() {
   if (!projects.length) { console.log('No projects.'); return; }
   console.log('\nProjects:\n');
   for (const p of projects) {
-    console.log(`  [${p.id.slice(-8)}]  ${p.name.padEnd(25)}  ${p.active_task_count} active tasks${p.description ? `  — ${p.description}` : ''}`);
+    const folder = p.root_folder ? `  -> ${p.root_folder}` : '';
+    console.log(`  [${p.id.slice(-8)}]  ${p.name.padEnd(25)}  ${p.active_task_count} active tasks${p.description ? `  — ${p.description}` : ''}${folder}`);
   }
   console.log('');
 }
@@ -269,6 +326,77 @@ function cmdProjectsAdd(flags) {
   if (!flags.name) { console.error('--name is required'); process.exit(1); }
   const project = db.addProject({ name: flags.name, description: flags.description });
   console.log(`Project created: [${project.id.slice(-8)}]  ${project.name}`);
+}
+
+// ── Init command ──────────────────────────────────────────────────────────────
+
+async function cmdInit(flags) {
+  const cwd = realCwd();
+
+  if (flags.status) {
+    const project = detectProject();
+    if (project) {
+      console.log(`\nLinked: ${project.name}  (${project.root_folder})\n`);
+    } else {
+      console.log('\nNo project linked to this directory.\n');
+    }
+    return;
+  }
+
+  // Non-interactive: --project or --name provided
+  if (flags.project) {
+    const project = db.getProjectByNameOrId(flags.project);
+    if (!project) { console.error(`Project not found: ${flags.project}`); process.exit(1); }
+    db.setProjectRootFolder(project.id, cwd);
+    console.log(`Linked: ${project.name}  ->  ${cwd}`);
+    return;
+  }
+
+  if (flags.name) {
+    const project = db.addProject({ name: flags.name, description: flags.description || null });
+    db.setProjectRootFolder(project.id, cwd);
+    console.log(`Created and linked: ${project.name}  ->  ${cwd}`);
+    return;
+  }
+
+  // Check if already linked (exact match on this directory)
+  const existing = detectProject();
+  if (existing && existing.root_folder === cwd) {
+    console.log(`\nThis directory is already linked to: ${existing.name}\n`);
+    return;
+  }
+
+  // Interactive
+  const projects = db.getProjects();
+
+  console.log('\nLink this directory to a project:\n');
+  projects.forEach((p, i) => {
+    const linked = p.root_folder ? `  (linked: ${p.root_folder})` : '';
+    console.log(`  ${i + 1}. ${p.name}${linked}`);
+  });
+  console.log(`  ${projects.length + 1}. Create new project`);
+  console.log('');
+
+  const answer = await prompt('Select: ');
+  const choice = parseInt(answer, 10);
+
+  if (isNaN(choice) || choice < 1 || choice > projects.length + 1) {
+    console.error('Invalid selection.');
+    process.exit(1);
+  }
+
+  if (choice <= projects.length) {
+    const project = projects[choice - 1];
+    db.setProjectRootFolder(project.id, cwd);
+    console.log(`\nLinked: ${project.name}  ->  ${cwd}\n`);
+  } else {
+    const name = await prompt('Project name: ');
+    if (!name) { console.error('Name is required.'); process.exit(1); }
+    const description = await prompt('Description (optional): ');
+    const project = db.addProject({ name, description: description || null });
+    db.setProjectRootFolder(project.id, cwd);
+    console.log(`\nCreated and linked: ${project.name}  ->  ${cwd}\n`);
+  }
 }
 
 // ── Help ──────────────────────────────────────────────────────────────────────
@@ -280,13 +408,20 @@ Kian — Task Manager
 Usage:
   kian <command> [options]
 
+Setup:
+  init                               Link current directory to a project (interactive)
+  init --project <name|id>           Link to an existing project
+  init --name <name>                 Create a new project and link current directory
+  init --status                      Show which project the current directory is linked to
+
 Task commands:
   poll                               Check if the agent has actionable work (exit 0 = yes, 1 = no)
   poll --assignee <name|id>          Poll for a specific agent (default: AGENT_NAME from .env)
-  list                               List all active tasks
+  list                               List tasks (auto-scoped to project if in a linked directory)
   list --assignee <name|id>          Filter by assignee
   list --status <status>             Filter by status (includes done/cancelled)
-  list --project <name|id>           Filter by project
+  list --project <name|id>           Filter by project (overrides detection)
+  list --all                         Show all tasks regardless of current directory
   get <id>                           Show a task with all its comments
   add --title <text> [options]       Create a new task
   update <id> [options]              Update a task
@@ -298,7 +433,7 @@ Add options:
   --title <text>          Task title (required)
   --description <text>    Longer context for the task
   --priority <level>      low | medium | high  (default: medium)
-  --project <name|id>
+  --project <name|id>     Overrides auto-detection
   --assignee <name|id>
   --created-by <name|id>
 
@@ -322,13 +457,14 @@ Project commands:
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
-function main() {
+async function main() {
   const { positional, flags } = parseArgs(process.argv.slice(2));
   const [command, sub] = positional;
 
   if (!command || command === 'help') { printHelp(); return; }
 
   switch (command) {
+    case 'init':     await cmdInit(flags); break;
     case 'poll':     cmdPoll(flags); break;
     case 'list':     cmdList(flags); break;
     case 'get':      cmdGet(sub); break;
@@ -354,4 +490,4 @@ function main() {
   }
 }
 
-main();
+main().catch(err => { console.error(err.message); process.exit(1); });

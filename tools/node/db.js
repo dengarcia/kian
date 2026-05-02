@@ -61,6 +61,13 @@ function applySchema(db) {
       created_at TEXT NOT NULL
     );
   `);
+
+  // Migrations
+  const projectCols = db.pragma('table_info(projects)');
+  if (!projectCols.some(c => c.name === 'root_folder')) {
+    db.exec('ALTER TABLE projects ADD COLUMN root_folder TEXT');
+    db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_root_folder ON projects(root_folder) WHERE root_folder IS NOT NULL');
+  }
 }
 
 function newId(prefix) {
@@ -146,6 +153,14 @@ function addProject({ name, description = null }) {
     project.id, project.name, project.description, project.created_at
   );
   return project;
+}
+
+function setProjectRootFolder(projectId, folder) {
+  getDb().prepare('UPDATE projects SET root_folder = ? WHERE id = ?').run(folder, projectId);
+}
+
+function getProjectsWithRootFolders() {
+  return getDb().prepare('SELECT id, name, root_folder FROM projects WHERE root_folder IS NOT NULL').all();
 }
 
 // ── Tasks ─────────────────────────────────────────────────────────────────────
@@ -291,17 +306,20 @@ function addComment({ task_id, author_id, body }) {
 
 // ── Poll ──────────────────────────────────────────────────────────────────────
 
-function getActionableTasks(agentId) {
+function getActionableTasks(agentId, projectId = null) {
   const db = getDb();
+  const projectFilter = projectId ? 'AND t.project_id = ?' : '';
+  const params = projectId ? [agentId, projectId] : [agentId];
   const candidates = db.prepare(`
     SELECT t.*
     FROM tasks t
     JOIN task_assignees ta ON ta.task_id = t.id
     WHERE ta.user_id = ? AND t.status IN ('todo', 'in_progress', 'needs_clarification')
+    ${projectFilter}
     ORDER BY
       CASE t.status WHEN 'in_progress' THEN 0 ELSE 1 END,
       CASE t.priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END
-  `).all(agentId);
+  `).all(...params);
 
   return candidates.filter(task => {
     if (task.status !== 'needs_clarification') return true;
@@ -401,6 +419,8 @@ module.exports = {
   addUser,
   getProjects,
   addProject,
+  setProjectRootFolder,
+  getProjectsWithRootFolders,
   getTasks,
   getTask,
   addTask,
