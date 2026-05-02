@@ -263,14 +263,16 @@ function cmdPoll(flags) {
   const tasks = db.getActionableTasks(agent.id, ctx?.projectId || null);
 
   if (!tasks.length) {
-    console.log(`No actionable tasks for ${agent.name}.`);
+    if (!flags.quiet) console.log(`No actionable tasks for ${agent.name}.`);
     process.exit(1);
   }
 
-  console.log(`${tasks.length} task${tasks.length > 1 ? 's' : ''} ready for ${agent.name}:`);
-  for (const task of tasks) {
-    const priority = PRIORITY_LABEL[task.priority] || task.priority;
-    console.log(`  [${task.id.slice(-8)}]  ${task.title}  (${task.status}, ${priority})`);
+  if (!flags.quiet) {
+    console.log(`${tasks.length} task${tasks.length > 1 ? 's' : ''} ready for ${agent.name}:`);
+    for (const task of tasks) {
+      const priority = PRIORITY_LABEL[task.priority] || task.priority;
+      console.log(`  [${task.id.slice(-8)}]  ${task.title}  (${task.status}, ${priority})`);
+    }
   }
   process.exit(0);
 }
@@ -417,6 +419,7 @@ Setup:
 Task commands:
   poll                               Check if the agent has actionable work (exit 0 = yes, 1 = no)
   poll --assignee <name|id>          Poll for a specific agent (default: AGENT_NAME from .env)
+  poll --quiet                       Suppress output (useful in scripts/cron)
   list                               List tasks (auto-scoped to project if in a linked directory)
   list --assignee <name|id>          Filter by assignee
   list --status <status>             Filter by status (includes done/cancelled)

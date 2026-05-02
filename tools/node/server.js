@@ -131,6 +131,22 @@ const server = http.createServer((req, res) => {
       return;
     }
 
+    // GET /api/poll?assignee=<nameOrId>[&project=<nameOrId>]
+    if (p === '/api/poll' && req.method === 'GET') {
+      const agentName = url.searchParams.get('assignee');
+      if (!agentName) { send(res, 400, { error: 'assignee is required' }); return; }
+      const agent = db.getUserByNameOrId(agentName);
+      if (!agent) { send(res, 404, { error: `Agent not found: ${agentName}` }); return; }
+      const projectParam = url.searchParams.get('project');
+      let projectId = null;
+      if (projectParam) {
+        const proj = db.getProjectByNameOrId(projectParam);
+        if (proj) projectId = proj.id;
+      }
+      send(res, 200, db.getActionableTasks(agent.id, projectId));
+      return;
+    }
+
     // GET /api/activity
     if (p === '/api/activity') {
       const limit = parseInt(url.searchParams.get('limit') || '50', 10);
