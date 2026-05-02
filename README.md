@@ -1,25 +1,39 @@
-# Kian Agent Framework
+# Kian
 
-A lightweight framework for running AI agents with a shared task board. Agents pick up assigned tasks, ask clarifying questions via task comments, and report back when done.
+**An AI teammate that works from your task board.**
+
+Assign tasks to Kian alongside your human team. It picks up work, asks a question when something is unclear, and marks tasks ready for review when done — no prompting, no babysitting.
+
+Kian is a participant in your workflow, not a chat window. The task board is the shared space. Comments are how it communicates.
+
+## How it works
+
+You create tasks and assign them to Kian. On its next check-in:
+
+- **Clear task** → Kian sets it to `in_progress`, does the work, leaves a summary comment, marks it `review`
+- **Unclear task** → Kian asks one focused question as a comment, sets status to `needs_clarification`, moves on
+- **Nothing to do** → Kian doesn't wake up at all (the poll check costs no LLM tokens)
+
+You review, confirm, and set tasks to `done`. That confirmation is yours — Kian never closes its own work.
 
 ## Concepts
 
-- **Users** — humans and agents are both users in the database
+- **Users** — humans and agents are both users; Kian is just another team member with `type: "agent"`
 - **Projects** — optional groupings for tasks
-- **Tasks** — assigned to one or more users; tracked through a clear status lifecycle
-- **Comments** — the communication channel between humans and agents on a task
+- **Tasks** — owned by assignees, tracked through a clear status lifecycle
+- **Comments** — how the team communicates on a task; Kian reads and writes them
 
 ### Task statuses
 
-| Status | Meaning |
-|---|---|
-| `todo` | Not started |
-| `in_progress` | Agent is working on it |
-| `needs_clarification` | Agent asked a question, waiting for reply |
-| `review` | Work done, human should check |
-| `blocked` | Waiting on an external dependency |
-| `done` | Confirmed complete (human sets this) |
-| `cancelled` | Dropped |
+| Status | Set by | Meaning |
+|---|---|---|
+| `todo` | human | Ready to be picked up |
+| `in_progress` | Kian | Kian is working on it |
+| `needs_clarification` | Kian | Kian asked a question, waiting for reply |
+| `review` | Kian | Work done, human should check |
+| `blocked` | human | Waiting on an external dependency |
+| `done` | human | Confirmed complete |
+| `cancelled` | either | Dropped |
 
 ## Setup
 
@@ -38,7 +52,7 @@ cp .env.example .env
 ```bash
 mkdir -p db
 cp db.example.json db/db.json
-# Edit db/db.json — update the example users with real names/emails
+# Edit db/db.json — replace the example users with your team
 ```
 
 **4. Verify**
@@ -47,39 +61,37 @@ node tools/node/tasks.js users list
 node tools/node/tasks.js list
 ```
 
-## Using the task manager
+## Task board CLI
 
 ```bash
-# Tasks
-node tools/node/tasks.js list
+# See what Kian has to work on
+node tools/node/tasks.js poll
 node tools/node/tasks.js list --assignee Kian
-node tools/node/tasks.js list --status needs_clarification
+
+# Manage tasks
+node tools/node/tasks.js list
 node tools/node/tasks.js get <task-id>
 node tools/node/tasks.js add --title "Write product review" --assignee Kian --priority high
-node tools/node/tasks.js update <task-id> --status in_progress
+node tools/node/tasks.js update <task-id> --status done
 node tools/node/tasks.js assign <task-id> --to Kian
-node tools/node/tasks.js comment <task-id> --body "Needs more context on the target audience"
+node tools/node/tasks.js comment <task-id> --body "Target audience is first-time buyers"
 
-# Users
+# Users and projects
 node tools/node/tasks.js users list
 node tools/node/tasks.js users add --name "Alice" --type human --email alice@example.com
-
-# Projects
 node tools/node/tasks.js projects list
 node tools/node/tasks.js projects add --name "Blog" --description "Content production"
 ```
 
-Task IDs can be specified as the full ID or as a suffix (last 8 characters shown in list output).
+Task IDs can be the full ID or the 8-character suffix shown in `list` output.
 
 ## Agent skills
 
-Two skills are included for the agent:
-
-- **`/check-tasks`** — polls for assigned tasks, starts working or asks questions
-- **`/update-task`** — marks a task as complete after work is done
+- **`/check-tasks`** — polls first (no LLM cost), then invokes Kian only if there is actionable work
+- **`/update-task`** — marks a task complete with a summary comment after work is done
 
 The agent definition is in `.claude/agents/kian.md`.
 
-## Database adapters
+## Database
 
-The current backend is a local JSON file at `db/db.json`. The data model is designed to be portable — a Notion adapter or any other backend can replace it by implementing the same read/write interface used in `tools/tasks.js`.
+The default backend is a local JSON file at `db/db.json` (gitignored). The data model is designed to be portable — a Notion adapter or any other backend can replace it by implementing the same read/write interface.
