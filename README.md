@@ -64,8 +64,12 @@ kian list
 ## Task board CLI
 
 ```bash
+# Link the current directory to a project (run once per repo)
+kian init
+
 # See what Kian has to work on
 kian poll
+kian poll --quiet          # exit-code only, no output (useful in scripts)
 kian list --assignee Kian
 
 # Manage tasks
@@ -84,6 +88,24 @@ kian projects add --name "Blog" --description "Content production"
 ```
 
 Task IDs can be the full ID or the 8-character suffix shown in `list` output.
+
+## Auto-polling daemon
+
+Run the daemon to have Kian automatically pick up tasks on a schedule:
+
+```bash
+./scripts/daemon.sh
+```
+
+- Polls every 30 seconds by default
+- Only invokes the LLM when there is actual work — the poll check is free
+- Stop with Ctrl-C
+
+```bash
+POLL_INTERVAL=60 ./scripts/daemon.sh   # poll every 60 seconds
+```
+
+Requires the `claude` CLI (`npm install -g @anthropic-ai/claude-code`).
 
 ## Agent skills
 
