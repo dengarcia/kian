@@ -20,6 +20,15 @@ function send(res, status, body, type = 'application/json') {
 
 function notFound(res) { send(res, 404, { error: 'Not found' }); }
 
+function parseBody(req, res, cb) {
+  let raw = '';
+  req.on('data', chunk => { raw += chunk; });
+  req.on('end', () => {
+    try { cb(JSON.parse(raw || '{}')); }
+    catch (err) { send(res, 400, { error: 'Invalid JSON' }); }
+  });
+}
+
 // ── Request handler ───────────────────────────────────────────────────────────
 
 const server = http.createServer((req, res) => {
@@ -35,8 +44,18 @@ const server = http.createServer((req, res) => {
 
   // API routes
   try {
+    // POST /api/tasks — create task
+    if (p === '/api/tasks' && req.method === 'POST') {
+      parseBody(req, res, ({ title, description, priority, project_id, assignees, created_by }) => {
+        if (!title?.trim()) { send(res, 400, { error: 'title is required' }); return; }
+        const task = db.addTask({ title: title.trim(), description, priority, project_id, assignees: assignees || [], created_by });
+        send(res, 201, task);
+      });
+      return;
+    }
+
     // GET /api/tasks
-    if (p === '/api/tasks') {
+    if (p === '/api/tasks' && req.method === 'GET') {
       const filters = {};
       const status   = url.searchParams.get('status');
       const assignee = url.searchParams.get('assignee');
@@ -75,12 +94,28 @@ const server = http.createServer((req, res) => {
       return;
     }
 
-    // GET /api/tasks/:id
+    // GET | PATCH | DELETE /api/tasks/:id
     const taskMatch = p.match(/^\/api\/tasks\/(.+)$/);
     if (taskMatch) {
-      const task = db.getTask(taskMatch[1]);
-      if (!task) { notFound(res); return; }
-      send(res, 200, task);
+      const id = taskMatch[1];
+      if (req.method === 'GET') {
+        const task = db.getTask(id);
+        if (!task) { notFound(res); return; }
+        send(res, 200, task);
+      } else if (req.method === 'PATCH') {
+        parseBody(req, res, ({ title, description, status, priority, notes, project_id, assignees }) => {
+          const task = db.updateTask(id, { title, description, status, priority, notes, project_id });
+          if (!task) { notFound(res); return; }
+          if (assignees !== undefined) db.setAssignees(task.id, assignees);
+          send(res, 200, db.getTask(task.id));
+        });
+      } else if (req.method === 'DELETE') {
+        const ok = db.deleteTask(id);
+        if (!ok) { notFound(res); return; }
+        send(res, 200, { ok: true });
+      } else {
+        send(res, 405, { error: 'Method not allowed' });
+      }
       return;
     }
 
