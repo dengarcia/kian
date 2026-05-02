@@ -34,8 +34,8 @@ while true; do
 
   if "$KIAN" poll --quiet 2>/dev/null; then
     echo "[$TIMESTAMP] Work found — invoking agent"
-    (cd "$REPO_DIR" && claude --print "check your tasks") 2>&1 | tail -5
-    echo "[$TIMESTAMP] Agent run complete"
+    (cd "$REPO_DIR" && claude --print "check your tasks") 2>&1
+    echo "[$TIMESTAMP] Agent run complete (exit $?)"
   else
     echo "[$TIMESTAMP] No tasks — sleeping ${INTERVAL}s"
   fi
