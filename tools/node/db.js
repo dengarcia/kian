@@ -4,7 +4,7 @@ const path = require('path');
 const crypto = require('crypto');
 const Database = require('better-sqlite3');
 
-const DB_PATH = path.join(__dirname, '../../db/kian.db');
+const DB_PATH = process.env.KIAN_DB_PATH || path.join(__dirname, '../../db/kian.db');
 
 let _db = null;
 
@@ -412,6 +412,7 @@ function deleteTask(idOrSuffix) {
 }
 
 module.exports = {
+  getDb,
   getUserByNameOrId,
   getProjectByNameOrId,
   getTaskByIdOrSuffix,

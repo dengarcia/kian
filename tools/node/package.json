@@ -5,7 +5,8 @@
   "private": true,
   "scripts": {
     "tasks": "node tasks.js",
-    "ui": "node server.js"
+    "ui": "node server.js",
+    "test": "node --test test/*.test.js"
   },
   "dependencies": {
     "better-sqlite3": "^9.0.0",

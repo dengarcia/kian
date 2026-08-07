@@ -493,4 +493,21 @@ async function main() {
   }
 }
 
-main().catch(err => { console.error(err.message); process.exit(1); });
+if (require.main === module) {
+  main().catch(err => { console.error(err.message); process.exit(1); });
+}
+
+module.exports = {
+  parseArgs,
+  resolveProjectContext,
+  detectProject,
+  cmdPoll,
+  cmdList,
+  cmdGet,
+  cmdAdd,
+  cmdUpdate,
+  cmdAssign,
+  cmdComment,
+  cmdSeed,
+  main,
+};
